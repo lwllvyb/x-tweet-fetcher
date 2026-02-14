@@ -1,81 +1,46 @@
 # x-tweet-fetcher
 
-🦞 Fetch tweets and replies from X/Twitter **without login or API keys**.
+Fetch tweets from X/Twitter **without login or API keys**.
 
-An [OpenClaw](https://github.com/openclaw/openclaw) skill that combines three methods to reliably extract tweet content and reply threads.
+An [OpenClaw](https://github.com/openclaw/openclaw) skill. Zero dependencies, zero configuration.
 
-## How It Works
+## What It Can Fetch
 
-| Method | What It Fetches | Requires |
-|--------|----------------|----------|
-| **FxTwitter API** | Tweet text, stats, author, quotes | Nothing (free) |
-| **Camofox + Nitter** | Reply threads / comments | [Camofox](https://github.com/nicepkg/camofox-browser) on port 9377 |
-| **rebrowser-playwright** | Full page HTML (fallback) | `rebrowser-playwright` npm package |
+| Content | Support |
+|---------|---------|
+| Regular tweets | ✅ Full text + stats |
+| Long tweets | ✅ Full text |
+| X Articles (long-form) | ✅ Complete article |
+| Quoted tweets | ✅ Included |
+| Stats (likes/RT/views) | ✅ Included |
 
 ## Quick Start
 
 ```bash
-# Fetch tweet text + stats
+# JSON output
 python3 scripts/fetch_tweet.py --url "https://x.com/user/status/123456"
 
-# Fetch tweet + replies
-python3 scripts/fetch_tweet.py --url "https://x.com/user/status/123456" --replies
+# Human readable
+python3 scripts/fetch_tweet.py --url "https://x.com/user/status/123456" --text-only
 
-# Fetch everything
-python3 scripts/fetch_tweet.py --url "https://x.com/user/status/123456" --full --pretty
+# Pretty JSON
+python3 scripts/fetch_tweet.py --url "https://x.com/user/status/123456" --pretty
 ```
 
-## Example Output
+## Requirements
 
-```json
-{
-  "tweet": {
-    "text": "Hello world!",
-    "author": "username",
-    "likes": 42,
-    "retweets": 5,
-    "views": 1200
-  },
-  "replies": [
-    { "author": "@someone", "text": "Great tweet!" }
-  ]
-}
-```
+- Python 3.7+
+- That's it. No packages, no API keys, no login.
 
-## Installation
+## How It Works
 
-### As OpenClaw Skill
-Copy the `x-tweet-fetcher` folder to your OpenClaw skills directory.
+Uses [FxTwitter](https://github.com/FxEmbed/FxEmbed) public API to fetch tweet data including full article content.
 
-### Standalone
-```bash
-git clone https://github.com/ythx-101/x-tweet-fetcher.git
-cd x-tweet-fetcher
+## Limitations
 
-# Method 1 (FxTwitter) works out of the box - no dependencies
-python3 scripts/fetch_tweet.py --url "https://x.com/..." 
-
-# For Method 2 (replies), install and run Camofox
-# For Method 3 (fallback), install rebrowser-playwright:
-npm install rebrowser-playwright
-```
-
-## Why Three Methods?
-
-- **FxTwitter API** is fast and reliable for tweet text, but can't fetch replies
-- **Camofox + Nitter** renders JavaScript pages and can extract reply threads
-- **rebrowser-playwright** bypasses bot detection for edge cases
-
-Together they cover all scenarios without needing an X account or API key.
-
-## Credits
-
-Built by 🦞 小灵 (Xiaoling) & 林月 (Qingyue) as part of the [OpenClaw](https://github.com/openclaw/openclaw) ecosystem.
-
-- [FxTwitter](https://github.com/FixTweet/FxTwitter) - Tweet embedding API
-- [Camofox](https://github.com/nicepkg/camofox-browser) - Anti-detection browser
-- [Nitter](https://github.com/zedeus/nitter) - Twitter alternative frontend
-- [rebrowser-playwright](https://github.com/nicepkg/rebrowser-playwright) - Bot-bypass Playwright
+- Cannot fetch reply threads
+- Cannot fetch deleted or private tweets
+- Depends on FxTwitter service availability
 
 ## License
 

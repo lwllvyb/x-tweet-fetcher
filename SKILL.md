@@ -1,99 +1,110 @@
 ---
 name: x-tweet-fetcher
-description: Fetch tweets and replies from X/Twitter without login or API keys. Use when the user shares an X/Twitter link and wants to read the tweet content, or when you need to fetch tweet text, stats, or reply threads. Combines FxTwitter API (tweet text + stats), Camofox + Nitter (reply threads), and rebrowser-playwright (full page fallback). No X account or API key required.
+description: >
+  Fetch tweets from X/Twitter without login or API keys.
+  Supports regular tweets, long tweets, quoted tweets, and full X Articles.
+  Zero dependencies, zero configuration.
 ---
 
 # X Tweet Fetcher
 
-Fetch tweets and replies from X/Twitter without authentication.
+Fetch tweets from X/Twitter without authentication. Uses FxTwitter API.
 
-## Architecture
+## What It Can Fetch
 
-Three complementary methods, used in order:
+| Content Type | Support |
+|-------------|---------|
+| Regular tweets | ✅ Full text + stats |
+| Long tweets (Twitter Blue) | ✅ Full text |
+| X Articles (long-form) | ✅ Complete article text |
+| Quoted tweets | ✅ Included |
+| Stats (likes/RT/views) | ✅ Included |
 
-| Method | Fetches | Requires |
-|--------|---------|----------|
-| **FxTwitter API** | Tweet text, stats, author, quotes | Nothing (free API) |
-| **Camofox + Nitter** | Reply threads, comments | Camofox running on port 9377 |
-| **rebrowser-playwright** | Full page HTML (fallback) | `rebrowser-playwright` npm package |
+## Usage
 
-## Quick Start
+### CLI
 
-### 1. Fetch tweet text + stats
 ```bash
+# JSON output
 python3 scripts/fetch_tweet.py --url "https://x.com/user/status/123456"
+
+# Pretty JSON
+python3 scripts/fetch_tweet.py --url "https://x.com/user/status/123456" --pretty
+
+# Text only (human readable)
+python3 scripts/fetch_tweet.py --url "https://x.com/user/status/123456" --text-only
 ```
 
-### 2. Fetch tweet + replies
-```bash
-python3 scripts/fetch_tweet.py --url "https://x.com/user/status/123456" --replies
+### From Agent Code
+
+```python
+from scripts.fetch_tweet import fetch_tweet
+
+result = fetch_tweet("https://x.com/user/status/123456")
+tweet = result["tweet"]
+
+# Regular tweet
+print(tweet["text"])
+
+# X Article (long-form)
+if tweet["is_article"]:
+    print(tweet["article"]["title"])
+    print(tweet["article"]["full_text"])  # Complete article
+    print(tweet["article"]["word_count"])
 ```
-
-### 3. Fetch everything (text + replies + full page)
-```bash
-python3 scripts/fetch_tweet.py --url "https://x.com/user/status/123456" --full
-```
-
-## Method Details
-
-### Method 1: FxTwitter API (Primary)
-
-Free, no auth, returns JSON with tweet text, author info, stats, and quoted tweets.
-
-```
-GET https://api.fxtwitter.com/{username}/status/{tweet_id}
-```
-
-**Returns**: text, author, likes, retweets, bookmarks, views, quotes, created_at
-
-### Method 2: Camofox + Nitter (Replies)
-
-Uses Camofox browser (port 9377) to render Nitter pages and extract reply threads.
-
-**Requires**: Camofox running (`node server.js` in camofox-browser directory)
-
-### Method 3: rebrowser-playwright (Fallback)
-
-Full headless browser that can bypass bot detection. Loads the actual x.com page.
-
-**Requires**: `npm install rebrowser-playwright`
 
 ## Output Format
 
 ```json
 {
+  "url": "https://x.com/user/status/123",
+  "username": "user",
+  "tweet_id": "123",
   "tweet": {
-    "text": "...",
-    "author": "...",
-    "likes": 7,
-    "retweets": 0,
-    "bookmarks": 8,
-    "views": 1756,
-    "created_at": "...",
-    "quote": { ... }
-  },
-  "replies": [
-    { "author": "...", "text": "...", "likes": 1 }
-  ]
+    "text": "Tweet content...",
+    "author": "Display Name",
+    "screen_name": "username",
+    "likes": 100,
+    "retweets": 50,
+    "bookmarks": 25,
+    "views": 10000,
+    "replies_count": 30,
+    "created_at": "Mon Jan 01 12:00:00 +0000 2026",
+    "is_note_tweet": false,
+    "is_article": true,
+    "article": {
+      "title": "Article Title",
+      "full_text": "Complete article content...",
+      "word_count": 4847,
+      "char_count": 27705
+    }
+  }
 }
 ```
 
-## Installation
+## Requirements
 
-```bash
-# Clone the skill
-git clone https://github.com/anthropics-ai/x-tweet-fetcher.git
+- Python 3.7+
+- No external packages (stdlib only)
+- No API keys
+- No login required
 
-# Install dependencies (only needed for Method 3)
-npm install rebrowser-playwright
+## How It Works
 
-# For Method 2, ensure Camofox is running
-cd /path/to/camofox-browser && node server.js
+Uses [FxTwitter](https://github.com/FxEmbed/FxEmbed) public API (`api.fxtwitter.com`) which proxies X/Twitter content. Articles are returned as structured blocks and reassembled into full text.
+
+## Limitations
+
+- Cannot fetch reply threads (X API required)
+- Cannot fetch deleted or private tweets
+- Rate limits depend on FxTwitter service availability
+- If FxTwitter goes down, the skill won't work (no fallback)
+
+## File Structure
+
 ```
-
-## Notes
-
-- Method 1 (FxTwitter) works everywhere, no setup needed
-- Method 2 (Camofox + Nitter) requires Camofox browser service
-- Method 3 (rebrowser-playwright) is a fallback for edge cases
-- No X/Twitter account or API key required for any method
+skills/x-tweet-fetcher/
+├── SKILL.md              (this file)
+└── scripts/
+    └── fetch_tweet.py    (single file, zero deps)
+```
