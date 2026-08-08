@@ -22,7 +22,7 @@ from .exceptions import (
 from .models import Article, Profile, Reply, Tweet
 from .router import Router
 
-__version__ = "3.0.0"
+__version__ = "3.1.0"
 
 __all__ = [
     "Router", "Tweet", "Reply", "Profile", "Article",

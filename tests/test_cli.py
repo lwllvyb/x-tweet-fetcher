@@ -164,3 +164,37 @@ def test_query_and_stats_mutually_exclusive(tmp_path):
     proc = _run_cli(["--ledger", str(db), "--query", "x", "--stats"])
     assert proc.returncode == 1
     assert "exclusive" in proc.stderr
+
+
+class _FakeFxtwitterRouter:
+    """Single-tweet stub: returns a fxtwitter-style dict WITHOUT tweet_id."""
+
+    last_backend = "fxtwitter"
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def fetch_tweet(self, username, tweet_id):
+        return {
+            "screen_name": "YuLin807",
+            "text": "单推归档测试",
+            "created_at": "Sat Aug 08 16:49:48 +0000",
+            "lang": "zh",
+            "likes": 1,
+            "media": {"videos": []},
+        }
+
+
+def test_single_tweet_archives_with_injected_id(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(cli, "Router", _FakeFxtwitterRouter)
+    db = tmp_path / "ledger.db"
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["--url", "https://x.com/YuLin807/status/2086132781533544665",
+                  "--ledger", str(db)])
+    assert exc.value.code == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["ledger"]["inserted"] == 1
+    hits = query_ledger(db)
+    assert len(hits) == 1
+    assert hits[0]["tweet_id"] == "2086132781533544665"
+    assert hits[0]["lang"] == "zh"

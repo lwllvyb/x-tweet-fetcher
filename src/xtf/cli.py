@@ -361,7 +361,13 @@ def main(argv=None) -> None:
         result["tweet"] = router.fetch_tweet(username, tweet_id)
     except XtfError as e:
         _fail(result, e)
-    _archive_if_requested(args, result, [result["tweet"]] if result.get("tweet") else [])
+    if result.get("tweet") and not result.get("error"):
+        # fxtwitter dicts carry no tweet_id; inject the one from the URL.
+        tweet_dict = dict(result["tweet"])
+        tweet_dict.setdefault("tweet_id", result.get("tweet_id") or "")
+        _archive_if_requested(args, result, [tweet_dict])
+    else:
+        _archive_if_requested(args, result, [])
 
     if args.text_only:
         tweet = result.get("tweet", {})
