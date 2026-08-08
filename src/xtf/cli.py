@@ -137,13 +137,19 @@ def main(argv=None) -> None:
     if args.ledger and ledger_mode:
         db = Path(args.ledger).expanduser()
         result: Dict[str, Any] = {"ledger": str(db)}
-        if args.query:
-            hits = query_ledger(db, keyword=args.query, limit=args.limit)
-            for hit in hits:
-                hit.pop("raw_json", None)  # keep CLI output compact
-            result.update({"query": args.query, "count": len(hits), "tweets": hits})
-        else:
-            result["stats"] = ledger_stats(db)
+        try:
+            if args.query:
+                hits = query_ledger(db, keyword=args.query, limit=args.limit)
+                for hit in hits:
+                    hit.pop("raw_json", None)  # keep CLI output compact
+                result.update({"query": args.query, "count": len(hits), "tweets": hits})
+            else:
+                result["stats"] = ledger_stats(db)
+        except Exception as exc:
+            result["error"] = f"{type(exc).__name__}: {exc}"
+            result["error_code"] = "ledger_error"
+            _emit(result, pretty)
+            sys.exit(1)
         _emit(result, pretty)
         sys.exit(0)
 
@@ -306,6 +312,12 @@ def main(argv=None) -> None:
                 result["warning"] = t("warn_no_replies")
         except XtfError as e:
             _fail(result, e)
+        if args.ledger:
+            # Mark every reply as a reply to the parent tweet so the ledger
+            # archives them with is_reply=1. Prefer any backend-provided value.
+            parent_id = result.get("tweet_id") or ""
+            for reply in result.get("replies", []):
+                reply.setdefault("in_reply_to_status_id", parent_id)
         _archive_if_requested(args, result, result.get("replies", []))
         if args.text_only:
             if result.get("error"):

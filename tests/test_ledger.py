@@ -126,6 +126,24 @@ def test_normalize_accepts_raw_backend_keys():
     assert json.loads(row[9]) == ["https://t.co/a"]
 
 
+def test_normalize_ignores_relative_time_keys():
+    # B1: time_ago / time are relative ("3h"), never real timestamps.
+    row = normalize(
+        {"tweet_id": "8", "text": "x", "time_ago": "3h", "time": "1h"},
+        "t", "2026-08-09T00:00:00+00:00",
+    )
+    assert row[1] is None  # created_at stays unset
+
+
+def test_normalize_rejects_conversation_id_only():
+    # S1: conversation_id is not a stable tweet id; do not dedupe on it.
+    with pytest.raises(ValueError):
+        normalize(
+            {"conversation_id": "123", "text": "no real id"},
+            "t", "2026-08-09T00:00:00+00:00",
+        )
+
+
 def test_normalize_rejects_missing_fields():
     with pytest.raises(ValueError):
         normalize({"text": "no id"}, "t", "2026-08-09T00:00:00+00:00")
@@ -149,6 +167,44 @@ def test_query_ledger_keyword_and_limit(tmp_path):
 
 def test_query_ledger_missing_db(tmp_path):
     assert query_ledger(tmp_path / "nope.db", keyword="x") == []
+
+
+def test_query_ledger_missing_table_returns_empty(tmp_path):
+    # B2: file exists but has no tweets table -> [] instead of OperationalError.
+    db = tmp_path / "foreign.db"
+    conn = sqlite3.connect(db)
+    try:
+        conn.execute("CREATE TABLE other (id INTEGER PRIMARY KEY)")
+        conn.commit()
+    finally:
+        conn.close()
+    assert query_ledger(db) == []
+    assert query_ledger(db, keyword="x") == []
+
+
+def test_query_ledger_sorts_by_imported_at(tmp_path, monkeypatch):
+    # B1: sort by imported_at DESC (not relative created_at), tie-break tweet_id.
+    import xtf.ledger as ledger
+    db = tmp_path / "ledger.db"
+    stamps = iter(["2026-08-01T00:00:00+00:00", "2026-08-02T00:00:00+00:00"])
+    monkeypatch.setattr(ledger, "utc_now", lambda: next(stamps))
+    archive_tweets(db, [_tweet_dict("1", "older import", created_at="2026-08-05T00:00:00Z")])
+    archive_tweets(db, [_tweet_dict("2", "newer import", created_at="2026-08-01T00:00:00Z")])
+    ids = [h["tweet_id"] for h in query_ledger(db)]
+    assert ids == ["2", "1"]
+
+
+def test_query_ledger_escapes_like_metacharacters(tmp_path):
+    # S3: % and _ must match literally, not as LIKE wildcards.
+    db = tmp_path / "ledger.db"
+    archive_tweets(db, [
+        _tweet_dict("1", "progress 100% done"),
+        _tweet_dict("2", "progress 1000 done"),
+        _tweet_dict("3", "use snake_case names"),
+        _tweet_dict("4", "use snake case names"),
+    ])
+    assert [h["tweet_id"] for h in query_ledger(db, keyword="100%")] == ["1"]
+    assert [h["tweet_id"] for h in query_ledger(db, keyword="snake_case")] == ["3"]
 
 
 def test_ledger_stats(tmp_path):

@@ -10,7 +10,7 @@ import pytest
 import xtf.cli as cli
 from xtf.cli import build_parser
 from xtf.ledger import query_ledger
-from xtf.models import Tweet
+from xtf.models import Reply, Tweet
 
 ROOT = Path(__file__).parent.parent
 
@@ -185,6 +185,23 @@ class _FakeFxtwitterRouter:
         }
 
 
+class _FakeRepliesRouter:
+    """Replies-mode stub returning Reply objects with nonzero views."""
+
+    last_backend = "nitter"
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def fetch_replies(self, username, tweet_id):
+        return [
+            Reply(author="@a", author_name="A", text="a reply",
+                  tweet_id="11", views=1),
+            Reply(author="@b", author_name="B", text="second reply",
+                  tweet_id="12", views=1),
+        ]
+
+
 def test_single_tweet_archives_with_injected_id(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(cli, "Router", _FakeFxtwitterRouter)
     db = tmp_path / "ledger.db"
@@ -198,3 +215,33 @@ def test_single_tweet_archives_with_injected_id(tmp_path, monkeypatch, capsys):
     assert len(hits) == 1
     assert hits[0]["tweet_id"] == "2086132781533544665"
     assert hits[0]["lang"] == "zh"
+
+
+def test_replies_archived_as_replies(tmp_path, monkeypatch, capsys):
+    # S2: replies archived via --url --replies must carry is_reply=1 and
+    # in_reply_to_status_id pointing at the parent tweet.
+    monkeypatch.setattr(cli, "Router", _FakeRepliesRouter)
+    db = tmp_path / "ledger.db"
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["--url", "https://x.com/YuLin807/status/2086132781533544665",
+                  "--replies", "--ledger", str(db)])
+    assert exc.value.code == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["ledger"]["inserted"] == 2
+    hits = query_ledger(db)
+    assert len(hits) == 2
+    for hit in hits:
+        assert hit["is_reply"] == 1
+        assert hit["in_reply_to_status_id"] == "2086132781533544665"
+
+
+def test_ledger_query_corrupt_db_returns_json_error(tmp_path):
+    # B2: a broken ledger file must produce a JSON error envelope, not a traceback.
+    db = tmp_path / "broken.db"
+    db.write_bytes(b"this is not a sqlite database at all")
+    proc = _run_cli(["--ledger", str(db), "--query", "x"])
+    assert proc.returncode == 1
+    out = json.loads(proc.stdout)
+    assert out["error_code"] == "ledger_error"
+    assert out["error"]
+    assert "traceback" not in proc.stderr.lower()

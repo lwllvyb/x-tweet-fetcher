@@ -16,12 +16,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
-#: Tweet dicts produced by ``Tweet.to_dict()`` carry a relative ``time_ago``
-#: (e.g. "3h"), never a real timestamp. Key fallbacks accept richer backend
-#: dicts (FxTwitter / Nitter raw rows) when available.
+#: Key fallbacks accept richer backend dicts (FxTwitter / Nitter raw rows)
+#: when available. Relative time fields (``time_ago``/``time``, e.g. "3h")
+#: are deliberately excluded from ``_CREATED_KEYS``: they are never real
+#: timestamps and would corrupt ordering and stats time ranges.
 _TEXT_KEYS = ("full_text", "text", "content", "tweet")
-_ID_KEYS = ("tweet_id", "id_str", "id", "conversation_id")
-_CREATED_KEYS = ("created_at", "timestamp", "date", "time", "time_ago")
+_ID_KEYS = ("tweet_id", "id_str", "id")
+_CREATED_KEYS = ("created_at", "timestamp", "date")
 _LANG_KEYS = ("lang", "language")
 _REPLY_KEYS = ("in_reply_to_status_id", "in_reply_to_status_id_str")
 _RT_KEYS = ("retweeted_status_id", "retweeted_status_id_str")
@@ -229,6 +230,11 @@ def _connect_ro(db_path: Path) -> sqlite3.Connection:
     return conn
 
 
+def _escape_like(text: str) -> str:
+    """Escape LIKE wildcards so keywords match literally."""
+    return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 def query_ledger(
     db_path: Path,
     keyword: Optional[str] = None,
@@ -239,15 +245,21 @@ def query_ledger(
     db_path = Path(db_path)
     if not db_path.exists():
         return []
-    sql = "SELECT * FROM tweets"
-    params: List[Any] = []
-    if keyword:
-        sql += " WHERE full_text LIKE ?"
-        params.append(f"%{keyword}%")
-    sql += " ORDER BY created_at DESC, tweet_id DESC LIMIT ? OFFSET ?"
-    params += [limit, offset]
     conn = _connect_ro(db_path)
     try:
+        table = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='tweets'"
+        ).fetchone()
+        if table is None:
+            # DB file exists but has no ledger schema — nothing to query.
+            return []
+        sql = "SELECT * FROM tweets"
+        params: List[Any] = []
+        if keyword:
+            sql += " WHERE full_text LIKE ? ESCAPE '\\'"
+            params.append(f"%{_escape_like(keyword)}%")
+        sql += " ORDER BY imported_at DESC, tweet_id DESC LIMIT ? OFFSET ?"
+        params += [limit, offset]
         return [dict(row) for row in conn.execute(sql, params)]
     finally:
         conn.close()
