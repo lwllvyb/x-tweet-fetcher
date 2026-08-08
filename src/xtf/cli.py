@@ -11,9 +11,11 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from pathlib import Path
 from typing import Any, Dict
 
 from . import config
+from .ledger import archive_tweets, ledger_stats, query_ledger
 from .backends.fxtwitter import supplement_views
 from .exceptions import XtfError
 from .i18n import set_lang, t
@@ -32,6 +34,25 @@ def _fail(result: Dict[str, Any], exc: XtfError) -> Dict[str, Any]:
     if getattr(exc, "causes", None):
         result["error_causes"] = {k: str(v) for k, v in exc.causes.items()}
     return result
+
+
+def _archive_if_requested(args, result: Dict[str, Any], tweet_dicts) -> None:
+    """Archive fetched tweet dicts when --ledger is set (never fatal).
+
+    Without --ledger this is a no-op, keeping legacy behavior identical.
+    """
+    if not args.ledger:
+        return
+    if result.get("error") or not tweet_dicts:
+        return
+    db = Path(args.ledger).expanduser()
+    try:
+        report = archive_tweets(
+            db, tweet_dicts, source=f"xtf:{result.get('backend', 'fetch')}"
+        )
+        result["ledger"] = report
+    except Exception as exc:  # archiving must not break a successful fetch
+        result["ledger_error"] = f"{type(exc).__name__}: {exc}"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -77,6 +98,13 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Backend: nitter (direct HTTP), browser (Camofox/Playwright), auto (nitter first, browser fallback)")
     parser.add_argument("--browser-driver", choices=["camofox", "playwright"], default=None,
                         help="Browser driver (default: XTF_BROWSER env or camofox)")
+    parser.add_argument("--ledger", metavar="DB",
+                        help="SQLite ledger DB. With a fetch mode: archive results after fetch. "
+                             "With --query/--stats: search/inspect the archive without fetching.")
+    parser.add_argument("--query", metavar="TERM",
+                        help="Search archived tweets by keyword (requires --ledger)")
+    parser.add_argument("--stats", action="store_true",
+                        help="Show ledger statistics (requires --ledger)")
     parser.add_argument("--lang", default=None, choices=["zh", "en"],
                         help="Output language for tool messages: zh (default) or en")
     return parser
@@ -86,15 +114,38 @@ def main(argv=None) -> None:
     parser = build_parser()
     args = parser.parse_args(argv)
     set_lang(args.lang or config.default_lang())
+    pretty = args.pretty
 
     modes = [bool(args.url), bool(args.user), bool(args.search),
              bool(args.user_info), bool(args.article), bool(args.monitor), bool(args.list)]
-    if sum(modes) > 1:
+    ledger_mode = bool(args.query or args.stats)
+    if ledger_mode and not args.ledger:
+        print(t("err_prefix") + "--query/--stats require --ledger <db>", file=sys.stderr)
+        sys.exit(1)
+    if args.query and args.stats:
+        print(t("err_prefix") + "--query and --stats are mutually exclusive", file=sys.stderr)
+        sys.exit(1)
+    if sum(modes) + int(ledger_mode) > 1:
         print(t("err_mutually_exclusive"), file=sys.stderr)
         sys.exit(1)
     if not any(modes):
-        parser.print_help()
-        sys.exit(1)
+        if not args.ledger or not ledger_mode:
+            parser.print_help()
+            sys.exit(1)
+
+    # ── Ledger-only modes: query / stats (no fetch) ─────────────────────
+    if args.ledger and ledger_mode:
+        db = Path(args.ledger).expanduser()
+        result: Dict[str, Any] = {"ledger": str(db)}
+        if args.query:
+            hits = query_ledger(db, keyword=args.query, limit=args.limit)
+            for hit in hits:
+                hit.pop("raw_json", None)  # keep CLI output compact
+            result.update({"query": args.query, "count": len(hits), "tweets": hits})
+        else:
+            result["stats"] = ledger_stats(db)
+        _emit(result, pretty)
+        sys.exit(0)
 
     nitter_instances = None
     if args.nitter:
@@ -107,7 +158,6 @@ def main(argv=None) -> None:
         browser_port=args.port,
         browser_nitter=nitter_instances[0] if nitter_instances else None,
     )
-    pretty = args.pretty
 
     # ── Mode: Search ─────────────────────────────────────────────────────
     if args.search:
@@ -117,6 +167,7 @@ def main(argv=None) -> None:
             result.update({"tweets": tweets, "count": len(tweets), "backend": router.last_backend})
         except XtfError as e:
             _fail(result, e)
+        _archive_if_requested(args, result, result.get("tweets", []))
         if args.text_only:
             if result.get("error"):
                 print(t("err_prefix") + result["error"], file=sys.stderr)
@@ -195,6 +246,7 @@ def main(argv=None) -> None:
                 result["warning"] = t("warn_no_tweets")
         except XtfError as e:
             _fail(result, e)
+        _archive_if_requested(args, result, result.get("tweets", []))
         _print_timeline_result(result, args, header=t("timeline_header", user=args.user,
                                                       count=result.get("count", 0)))
         sys.exit(1 if result.get("error") else 0)
@@ -254,6 +306,7 @@ def main(argv=None) -> None:
                 result["warning"] = t("warn_no_replies")
         except XtfError as e:
             _fail(result, e)
+        _archive_if_requested(args, result, result.get("replies", []))
         if args.text_only:
             if result.get("error"):
                 print(t("err_prefix") + result["error"], file=sys.stderr)
@@ -290,6 +343,7 @@ def main(argv=None) -> None:
                 result["warning"] = t("warn_no_tweets")
         except XtfError as e:
             _fail(result, e)
+        _archive_if_requested(args, result, result.get("tweets", []))
         _print_timeline_result(result, args, header=t("list_header", list_id=list_id,
                                                       count=result.get("count", 0)))
         sys.exit(1 if result.get("error") else 0)
@@ -307,6 +361,7 @@ def main(argv=None) -> None:
         result["tweet"] = router.fetch_tweet(username, tweet_id)
     except XtfError as e:
         _fail(result, e)
+    _archive_if_requested(args, result, [result["tweet"]] if result.get("tweet") else [])
 
     if args.text_only:
         tweet = result.get("tweet", {})

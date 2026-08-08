@@ -173,3 +173,33 @@ def test_ledger_stats(tmp_path):
 
 def test_ledger_stats_missing_db(tmp_path):
     assert ledger_stats(tmp_path / "nope.db")["total_tweets"] == 0
+
+
+# ── stats hardening (never None, never crash) ───────────────────────────
+def test_ledger_stats_empty_db(tmp_path):
+    db = tmp_path / "ledger.db"
+    import sqlite3
+    conn = sqlite3.connect(db)
+    try:
+        ensure_tables(conn)
+    finally:
+        conn.close()
+    stats = ledger_stats(db)
+    assert stats["exists"] is True and stats["total_tweets"] == 0
+    for key in ("total_replies", "total_quoted", "total_retweeted",
+                "total_with_media", "total_with_urls", "first_created_at",
+                "last_created_at", "last_imported_at"):
+        assert key in stats
+
+
+def test_ledger_stats_foreign_db_no_crash(tmp_path):
+    db = tmp_path / "foreign.db"
+    import sqlite3
+    conn = sqlite3.connect(db)
+    try:
+        conn.execute("CREATE TABLE other (id INTEGER PRIMARY KEY)")
+        conn.commit()
+    finally:
+        conn.close()
+    stats = ledger_stats(db)
+    assert stats["exists"] is True and stats["total_tweets"] == 0

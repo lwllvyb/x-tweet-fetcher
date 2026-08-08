@@ -253,14 +253,42 @@ def query_ledger(
         conn.close()
 
 
+def _empty_stats(exists: bool) -> Dict[str, Any]:
+    """Stable stats skeleton so callers can rely on the full key set."""
+    return {
+        "exists": exists,
+        "total_tweets": 0,
+        "total_replies": 0,
+        "total_quoted": 0,
+        "total_retweeted": 0,
+        "total_with_media": 0,
+        "total_with_urls": 0,
+        "first_created_at": None,
+        "last_created_at": None,
+        "last_imported_at": None,
+        "langs": {},
+    }
+
+
 def ledger_stats(db_path: Path) -> Dict[str, Any]:
-    """Aggregate stats over the archived tweets."""
+    """Aggregate stats over the archived tweets.
+
+    Never returns None and never raises for a missing/empty/foreign DB:
+    the returned dict always carries the full key set (see ``_empty_stats``).
+    """
     db_path = Path(db_path)
     if not db_path.exists():
-        return {"total_tweets": 0, "exists": False}
+        return _empty_stats(exists=False)
     conn = _connect_ro(db_path)
     try:
+        table = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='tweets'"
+        ).fetchone()
+        if table is None:
+            return _empty_stats(exists=True)
         total = conn.execute("SELECT COUNT(*) FROM tweets").fetchone()[0]
+        if total == 0:
+            return _empty_stats(exists=True)
         replies = conn.execute("SELECT COUNT(*) FROM tweets WHERE is_reply = 1").fetchone()[0]
         quoted = conn.execute(
             "SELECT COUNT(*) FROM tweets WHERE quoted_status_id IS NOT NULL"

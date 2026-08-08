@@ -1,7 +1,7 @@
 # 计划：将 tweet-ledger 功能集成进 x-tweet-fetcher（xtf）
 
 **日期**: 2026-08-08
-**状态**: 阶段1 完成（ledger 核心已移植，79 tests PASS）
+**状态**: 阶段2 完成（CLI 接入 --ledger/--query/--stats，89 tests PASS）
 **任务定级**: medium（多文件代码集成，有测试，不改生产服务）
 **仓库**: /Users/linyu/projects/x-tweet-fetcher-ledger（新工作区）
 
