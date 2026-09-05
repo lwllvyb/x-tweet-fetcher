@@ -5,6 +5,7 @@ Output of ``fetch_tweet`` reproduces the v1 ``tweet`` dict byte-for-byte
 """
 from __future__ import annotations
 
+import re
 import sys
 from typing import Any, Dict, List
 
@@ -15,6 +16,36 @@ from ..parsers.fxtwitter_json import extract_media
 from .base import Backend
 
 API = "https://api.fxtwitter.com"
+
+
+
+def _normalize_entity_map(entity_map: Any) -> Dict[str, Any]:
+    """Normalize Draft.js entityMap (dict or list-of-{key,value}) to a dict."""
+    if isinstance(entity_map, dict):
+        return {str(k): v for k, v in entity_map.items()}
+    out: Dict[str, Any] = {}
+    if isinstance(entity_map, list):
+        for e in entity_map:
+            if not isinstance(e, dict):
+                continue
+            k = e.get("key")
+            if k is None:
+                continue
+            out[str(k)] = e.get("value")
+    return out
+
+
+def _entity_markdown_text(entity: Any) -> str:
+    """Extract readable text from a MARKDOWN entity (unwrap fences when present)."""
+    if not isinstance(entity, dict) or entity.get("type") != "MARKDOWN":
+        return ""
+    md = (entity.get("data") or {}).get("markdown") or ""
+    if not isinstance(md, str):
+        return ""
+    m = re.search(r"```(?:[a-zA-Z0-9_-]*)?\n(.*?)```", md, re.S)
+    if m:
+        return m.group(1).strip("\n")
+    return md.strip()
 
 
 def _reconstruct_article(article: Dict[str, Any]) -> Dict[str, Any]:
@@ -42,40 +73,42 @@ def _reconstruct_article(article: Dict[str, Any]) -> Dict[str, Any]:
             if mid and murl:
                 media_id_to_url[mid] = murl
 
-        entity_map = content.get("entityMap") or {}
+        entities = _normalize_entity_map(content.get("entityMap") or {})
         key_to_url: Dict[str, str] = {}
-        if isinstance(entity_map, dict):
-            for e_key, e_val in entity_map.items():
-                if isinstance(e_val, dict) and e_val.get("type") == "MEDIA":
-                    for mi in e_val.get("data", {}).get("mediaItems", []):
-                        if isinstance(mi, dict):
-                            mid = str(mi.get("mediaId", ""))
-                            if mid in media_id_to_url:
-                                key_to_url[str(e_key)] = media_id_to_url[mid]
-        elif isinstance(entity_map, list):
-            for e in entity_map:
-                if not isinstance(e, dict):
-                    continue
-                v = e.get("value", {})
-                k = e.get("key")
-                if isinstance(v, dict) and v.get("type") == "MEDIA" and k is not None:
-                    for mi in v.get("data", {}).get("mediaItems", []):
-                        if isinstance(mi, dict):
-                            mid = str(mi.get("mediaId", ""))
-                            if mid in media_id_to_url:
-                                key_to_url[str(k)] = media_id_to_url[mid]
+        key_to_markdown: Dict[str, str] = {}
+        for e_key, e_val in entities.items():
+            if not isinstance(e_val, dict):
+                continue
+            etype = e_val.get("type")
+            if etype == "MEDIA":
+                for mi in e_val.get("data", {}).get("mediaItems", []):
+                    if isinstance(mi, dict):
+                        mid = str(mi.get("mediaId", ""))
+                        if mid in media_id_to_url:
+                            key_to_url[str(e_key)] = media_id_to_url[mid]
+            elif etype == "MARKDOWN":
+                md_text = _entity_markdown_text(e_val)
+                if md_text:
+                    key_to_markdown[str(e_key)] = md_text
 
         atomic_media: Dict[int, str] = {}
+        atomic_markdown: Dict[int, str] = {}
         for bi, b in enumerate(blocks):
             if not isinstance(b, dict):
                 continue
-            if b.get("type") == "atomic":
-                for r in b.get("entityRanges", []):
-                    if not isinstance(r, dict):
-                        continue
-                    ek = r.get("key")
-                    if ek is not None and str(ek) in key_to_url:
-                        atomic_media[bi] = key_to_url[str(ek)]
+            if b.get("type") != "atomic":
+                continue
+            for r in b.get("entityRanges", []):
+                if not isinstance(r, dict):
+                    continue
+                ek = r.get("key")
+                if ek is None:
+                    continue
+                sk = str(ek)
+                if sk in key_to_url:
+                    atomic_media[bi] = key_to_url[sk]
+                elif sk in key_to_markdown:
+                    atomic_markdown[bi] = key_to_markdown[sk]
 
         text_parts: List[str] = []
         for bi, b in enumerate(blocks):
@@ -94,6 +127,8 @@ def _reconstruct_article(article: Dict[str, Any]) -> Dict[str, Any]:
                         and "\r" not in img_url
                     ):
                         text_parts.append(f"![]({img_url})")
+                elif bi in atomic_markdown:
+                    text_parts.append(atomic_markdown[bi])
                 elif btext:
                     text_parts.append(btext)
             elif btext:
