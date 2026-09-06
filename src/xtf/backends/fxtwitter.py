@@ -5,8 +5,9 @@ Output of ``fetch_tweet`` reproduces the v1 ``tweet`` dict byte-for-byte
 """
 from __future__ import annotations
 
+import re
 import sys
-from typing import Any, Dict, List
+from typing import Any
 
 from .. import http
 from ..exceptions import NotFound, UpstreamDown, XtfError
@@ -17,9 +18,39 @@ from .base import Backend
 API = "https://api.fxtwitter.com"
 
 
-def _reconstruct_article(article: Dict[str, Any]) -> Dict[str, Any]:
+
+def _normalize_entity_map(entity_map: Any) -> dict[str, Any]:
+    """Normalize Draft.js entityMap (dict or list-of-{key,value}) to a dict."""
+    if isinstance(entity_map, dict):
+        return {str(k): v for k, v in entity_map.items()}
+    out: dict[str, Any] = {}
+    if isinstance(entity_map, list):
+        for e in entity_map:
+            if not isinstance(e, dict):
+                continue
+            k = e.get("key")
+            if k is None:
+                continue
+            out[str(k)] = e.get("value")
+    return out
+
+
+def _entity_markdown_text(entity: Any) -> str:
+    """Extract readable text from a MARKDOWN entity (unwrap fences when present)."""
+    if not isinstance(entity, dict) or entity.get("type") != "MARKDOWN":
+        return ""
+    md = (entity.get("data") or {}).get("markdown") or ""
+    if not isinstance(md, str):
+        return ""
+    m = re.search(r"```(?:[a-zA-Z0-9_-]*)?\n(.*?)```", md, re.DOTALL)
+    if m:
+        return m.group(1).strip("\n")
+    return md.strip()
+
+
+def _reconstruct_article(article: dict[str, Any]) -> dict[str, Any]:
     """Rebuild article full_text (with inline images) from Draft.js blocks."""
-    article_data: Dict[str, Any] = {
+    article_data: dict[str, Any] = {
         "title": article.get("title", ""),
         "preview_text": article.get("preview_text", ""),
         "created_at": article.get("created_at", ""),
@@ -30,7 +61,7 @@ def _reconstruct_article(article: Dict[str, Any]) -> Dict[str, Any]:
     media_entities = article.get("media_entities", [])
 
     if blocks:
-        media_id_to_url: Dict[str, str] = {}
+        media_id_to_url: dict[str, str] = {}
         if cover:
             cover_url = cover.get("media_info", {}).get("original_img_url")
             cover_id = cover.get("media_id")
@@ -42,42 +73,44 @@ def _reconstruct_article(article: Dict[str, Any]) -> Dict[str, Any]:
             if mid and murl:
                 media_id_to_url[mid] = murl
 
-        entity_map = content.get("entityMap") or {}
-        key_to_url: Dict[str, str] = {}
-        if isinstance(entity_map, dict):
-            for e_key, e_val in entity_map.items():
-                if isinstance(e_val, dict) and e_val.get("type") == "MEDIA":
-                    for mi in e_val.get("data", {}).get("mediaItems", []):
-                        if isinstance(mi, dict):
-                            mid = str(mi.get("mediaId", ""))
-                            if mid in media_id_to_url:
-                                key_to_url[str(e_key)] = media_id_to_url[mid]
-        elif isinstance(entity_map, list):
-            for e in entity_map:
-                if not isinstance(e, dict):
-                    continue
-                v = e.get("value", {})
-                k = e.get("key")
-                if isinstance(v, dict) and v.get("type") == "MEDIA" and k is not None:
-                    for mi in v.get("data", {}).get("mediaItems", []):
-                        if isinstance(mi, dict):
-                            mid = str(mi.get("mediaId", ""))
-                            if mid in media_id_to_url:
-                                key_to_url[str(k)] = media_id_to_url[mid]
+        entities = _normalize_entity_map(content.get("entityMap") or {})
+        key_to_url: dict[str, str] = {}
+        key_to_markdown: dict[str, str] = {}
+        for e_key, e_val in entities.items():
+            if not isinstance(e_val, dict):
+                continue
+            etype = e_val.get("type")
+            if etype == "MEDIA":
+                for mi in e_val.get("data", {}).get("mediaItems", []):
+                    if isinstance(mi, dict):
+                        mid = str(mi.get("mediaId", ""))
+                        if mid in media_id_to_url:
+                            key_to_url[str(e_key)] = media_id_to_url[mid]
+            elif etype == "MARKDOWN":
+                md_text = _entity_markdown_text(e_val)
+                if md_text:
+                    key_to_markdown[str(e_key)] = md_text
 
-        atomic_media: Dict[int, str] = {}
+        atomic_media: dict[int, str] = {}
+        atomic_markdown: dict[int, str] = {}
         for bi, b in enumerate(blocks):
             if not isinstance(b, dict):
                 continue
-            if b.get("type") == "atomic":
-                for r in b.get("entityRanges", []):
-                    if not isinstance(r, dict):
-                        continue
-                    ek = r.get("key")
-                    if ek is not None and str(ek) in key_to_url:
-                        atomic_media[bi] = key_to_url[str(ek)]
+            if b.get("type") != "atomic":
+                continue
+            for r in b.get("entityRanges", []):
+                if not isinstance(r, dict):
+                    continue
+                ek = r.get("key")
+                if ek is None:
+                    continue
+                sk = str(ek)
+                if sk in key_to_url:
+                    atomic_media[bi] = key_to_url[sk]
+                elif sk in key_to_markdown:
+                    atomic_markdown[bi] = key_to_markdown[sk]
 
-        text_parts: List[str] = []
+        text_parts: list[str] = []
         for bi, b in enumerate(blocks):
             if not isinstance(b, dict):
                 continue
@@ -94,6 +127,8 @@ def _reconstruct_article(article: Dict[str, Any]) -> Dict[str, Any]:
                         and "\r" not in img_url
                     ):
                         text_parts.append(f"![]({img_url})")
+                elif bi in atomic_markdown:
+                    text_parts.append(atomic_markdown[bi])
                 elif btext:
                     text_parts.append(btext)
             elif btext:
@@ -119,9 +154,9 @@ def _reconstruct_article(article: Dict[str, Any]) -> Dict[str, Any]:
     return article_data
 
 
-def normalize_tweet_json(tweet: Dict[str, Any]) -> Dict[str, Any]:
+def normalize_tweet_json(tweet: dict[str, Any]) -> dict[str, Any]:
     """FxTwitter tweet object -> v1-compatible tweet dict. Pure."""
-    tweet_data: Dict[str, Any] = {
+    tweet_data: dict[str, Any] = {
         "text": tweet.get("text", ""),
         "author": tweet.get("author", {}).get("name", ""),
         "screen_name": tweet.get("author", {}).get("screen_name", ""),
@@ -172,7 +207,7 @@ class FxTwitterBackend(Backend):
     def available(self) -> bool:
         return True  # public API; failures surface per-call
 
-    def fetch_tweet(self, username: str, tweet_id: str) -> Dict[str, Any]:
+    def fetch_tweet(self, username: str, tweet_id: str) -> dict[str, Any]:
         data = http.get_json(
             f"{API}/{username}/status/{tweet_id}",
             headers={"User-Agent": "Mozilla/5.0"},
@@ -202,7 +237,7 @@ class FxTwitterBackend(Backend):
             joined=u.get("joined", ""),
         )
 
-    def fetch_user_info_dict(self, username: str) -> Dict[str, Any]:
+    def fetch_user_info_dict(self, username: str) -> dict[str, Any]:
         """v1-compatible extended profile dict (includes avatar/banner/etc)."""
         data = http.get_json(f"{API}/{username}", timeout=10)
         u = data.get("user", {})
@@ -223,7 +258,7 @@ class FxTwitterBackend(Backend):
         }
 
 
-def supplement_views(tweets: List[Dict], max_supplement: int = 50) -> List[Dict]:
+def supplement_views(tweets: list[dict], max_supplement: int = 50) -> list[dict]:
     """Fill missing view counts via FxTwitter. Best-effort, never raises."""
     for tw in tweets[:max_supplement]:
         if tw.get("views", 0) != 0:

@@ -13,7 +13,7 @@ import json
 import time
 import urllib.error
 import urllib.request
-from typing import Any, Dict, Optional
+from typing import Any
 
 from .config import RETRY_ATTEMPTS, RETRY_BACKOFF_BASE, USER_AGENT
 from .exceptions import NotFound, RateLimited, UpstreamDown
@@ -21,7 +21,7 @@ from .exceptions import NotFound, RateLimited, UpstreamDown
 _MAX_BODY = 10 * 1024 * 1024
 
 
-def get_text(url: str, headers: Optional[Dict[str, str]] = None,
+def get_text(url: str, headers: dict[str, str] | None = None,
              timeout: int = 15, retries: int = RETRY_ATTEMPTS) -> str:
     """GET a URL, return the response body as text. Raises typed errors."""
     hdrs = {"User-Agent": USER_AGENT}
@@ -55,7 +55,7 @@ def get_text(url: str, headers: Optional[Dict[str, str]] = None,
     raise last_exc
 
 
-def get_json(url: str, headers: Optional[Dict[str, str]] = None,
+def get_json(url: str, headers: dict[str, str] | None = None,
              timeout: int = 15, retries: int = RETRY_ATTEMPTS) -> Any:
     """GET a URL and parse JSON. Raises UpstreamDown on malformed JSON."""
     raw = get_text(url, headers=headers, timeout=timeout, retries=retries)

@@ -1,9 +1,10 @@
 """Parsers for FxTwitter API JSON responses. Pure functions."""
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
-def extract_media(tweet_obj: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+
+def extract_media(tweet_obj: dict[str, Any]) -> dict[str, Any] | None:
     """Extract media information (photos/videos) from tweet object."""
     media_data = {}
     media = tweet_obj.get("media", {})

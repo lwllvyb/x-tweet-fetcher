@@ -36,7 +36,7 @@ def test_parse_stats_from_text(raw, expected):
 
 def test_parse_stats_icon_format():
     raw = "prefix \ue803 3 \ue80c 1 \ue801 42 \ue800"
-    text, replies, retweets, likes, views = _parse_stats_from_text(raw)
+    text, replies, retweets, likes, _views = _parse_stats_from_text(raw)
     assert text == "prefix"
     assert (replies, retweets, likes) == (3, 1, 42)
 

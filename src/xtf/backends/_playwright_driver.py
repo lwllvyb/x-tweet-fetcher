@@ -20,11 +20,10 @@ Additional high-level helpers for Nitter:
 """
 
 import os
+import secrets
 import sys
 import time
-import secrets
 import urllib.parse
-from typing import Optional
 
 # ---------------------------------------------------------------------------
 # Chromium executable path
@@ -32,7 +31,7 @@ from typing import Optional
 _CHROMIUM_EXEC_ENV = "PLAYWRIGHT_CHROMIUM_EXEC"
 
 
-def _resolve_chromium_executable(browser_type) -> Optional[str]:
+def _resolve_chromium_executable(browser_type) -> str | None:
     """Return a Chromium executable path, preferring a valid env override."""
     env_path = os.environ.get(_CHROMIUM_EXEC_ENV)
     if env_path:
@@ -119,7 +118,7 @@ def _page_text(page) -> str:
         return ""
 
 
-def _fetch_url_text(url: str, wait: float = 8) -> Optional[str]:
+def _fetch_url_text(url: str, wait: float = 8) -> str | None:
     """Fetch *url* with Playwright, return visible text.  None on failure."""
     pw = browser = None
     try:
@@ -150,7 +149,7 @@ def check_camofox(port: int = 9377) -> bool:
     return True
 
 
-def camofox_open_tab(url: str, session_key: str, port: int = 9377) -> Optional[str]:
+def camofox_open_tab(url: str, session_key: str, port: int = 9377) -> str | None:
     """Fetch *url* and store the text; return a synthetic tab_id."""
     if not url.startswith(("http://", "https://")):
         print(f"[playwright_client] rejected non-HTTP URL: {url[:60]}", file=sys.stderr)
@@ -163,7 +162,7 @@ def camofox_open_tab(url: str, session_key: str, port: int = 9377) -> Optional[s
     return tab_id
 
 
-def camofox_snapshot(tab_id: str, port: int = 9377) -> Optional[str]:
+def camofox_snapshot(tab_id: str, port: int = 9377) -> str | None:
     """Return stored text for *tab_id*."""
     return _tab_store.get(tab_id)
 
@@ -173,7 +172,7 @@ def camofox_close_tab(tab_id: str, port: int = 9377):
     _tab_store.pop(tab_id, None)
 
 
-def camofox_fetch_page(url: str, session_key: str, wait: float = 8, port: int = 9377) -> Optional[str]:
+def camofox_fetch_page(url: str, session_key: str, wait: float = 8, port: int = 9377) -> str | None:
     """Fetch *url* via Playwright; return visible text.  Primary entry point."""
     return _fetch_url_text(url, wait=wait)
 

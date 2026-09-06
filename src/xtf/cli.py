@@ -12,23 +12,23 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 from . import config
-from .ledger import archive_tweets, ledger_stats, query_ledger
 from .backends.fxtwitter import supplement_views
 from .exceptions import XtfError
 from .i18n import set_lang, t
+from .ledger import archive_tweets, ledger_stats, query_ledger
 from .monitor import monitor_mentions
 from .parsers.urls import extract_list_id, parse_article_id, parse_tweet_url
 from .router import Router
 
 
-def _emit(result: Dict[str, Any], pretty: bool) -> None:
+def _emit(result: dict[str, Any], pretty: bool) -> None:
     print(json.dumps(result, ensure_ascii=False, indent=2 if pretty else None))
 
 
-def _fail(result: Dict[str, Any], exc: XtfError) -> Dict[str, Any]:
+def _fail(result: dict[str, Any], exc: XtfError) -> dict[str, Any]:
     result["error"] = str(exc) or exc.code
     result["error_code"] = exc.code
     if getattr(exc, "causes", None):
@@ -36,7 +36,7 @@ def _fail(result: Dict[str, Any], exc: XtfError) -> Dict[str, Any]:
     return result
 
 
-def _archive_if_requested(args, result: Dict[str, Any], tweet_dicts) -> None:
+def _archive_if_requested(args, result: dict[str, Any], tweet_dicts) -> None:
     """Archive fetched tweet dicts when --ledger is set (never fatal).
 
     Without --ledger this is a no-op, keeping legacy behavior identical.
@@ -128,15 +128,14 @@ def main(argv=None) -> None:
     if sum(modes) + int(ledger_mode) > 1:
         print(t("err_mutually_exclusive"), file=sys.stderr)
         sys.exit(1)
-    if not any(modes):
-        if not args.ledger or not ledger_mode:
-            parser.print_help()
-            sys.exit(1)
+    if not any(modes) and (not args.ledger or not ledger_mode):
+        parser.print_help()
+        sys.exit(1)
 
     # ── Ledger-only modes: query / stats (no fetch) ─────────────────────
     if args.ledger and ledger_mode:
         db = Path(args.ledger).expanduser()
-        result: Dict[str, Any] = {"ledger": str(db)}
+        result: dict[str, Any] = {"ledger": str(db)}
         try:
             if args.query:
                 hits = query_ledger(db, keyword=args.query, limit=args.limit)
@@ -167,7 +166,7 @@ def main(argv=None) -> None:
 
     # ── Mode: Search ─────────────────────────────────────────────────────
     if args.search:
-        result: Dict[str, Any] = {"query": args.search}
+        result: dict[str, Any] = {"query": args.search}
         try:
             tweets = [tw.to_dict() for tw in router.search(args.search, limit=args.limit)]
             result.update({"tweets": tweets, "count": len(tweets), "backend": router.last_backend})
@@ -405,7 +404,7 @@ def main(argv=None) -> None:
     sys.exit(1 if result.get("error") else 0)
 
 
-def _print_timeline_result(result: Dict[str, Any], args, header: str) -> None:
+def _print_timeline_result(result: dict[str, Any], args, header: str) -> None:
     if args.text_only:
         if result.get("error"):
             print(t("err_prefix") + result["error"], file=sys.stderr)

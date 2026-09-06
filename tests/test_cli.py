@@ -4,10 +4,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-
 import pytest
 
-import xtf.cli as cli
+from xtf import cli
 from xtf.cli import build_parser
 from xtf.ledger import query_ledger
 from xtf.models import Reply, Tweet

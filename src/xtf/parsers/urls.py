@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import re
-from typing import Optional
+
 
 def parse_tweet_url(url: str) -> tuple:
     """Extract username and tweet_id from X/Twitter URL."""
@@ -23,7 +23,7 @@ def parse_tweet_url(url: str) -> tuple:
 
 
 
-def extract_list_id(input_str: str) -> Optional[str]:
+def extract_list_id(input_str: str) -> str | None:
     """Extract list ID from a URL or raw ID string.
 
     Accepts:
@@ -47,7 +47,7 @@ def extract_list_id(input_str: str) -> Optional[str]:
 
     return None
 
-def parse_article_id(input_str: str) -> Optional[str]:
+def parse_article_id(input_str: str) -> str | None:
     """Extract article ID from a URL or raw ID string.
 
     Accepts:

@@ -8,7 +8,7 @@ from __future__ import annotations
 import re
 import urllib.parse
 from html.parser import HTMLParser
-from typing import Dict, List, Optional, Tuple
+
 
 class _NitterHTMLParser(HTMLParser):
     """
@@ -18,7 +18,7 @@ class _NitterHTMLParser(HTMLParser):
 
     def __init__(self):
         super().__init__(convert_charrefs=True)
-        self.events: List[Tuple] = []  # ("open", tag, attrs) | ("close", tag) | ("text", data)
+        self.events: list[tuple] = []  # ("open", tag, attrs) | ("close", tag) | ("text", data)
 
     def handle_starttag(self, tag: str, attrs):
         self.events.append(("open", tag, dict(attrs)))
@@ -32,7 +32,7 @@ class _NitterHTMLParser(HTMLParser):
             self.events.append(("text", stripped))
 
 
-def _parse_html(html: str) -> "_NitterHTMLParser":
+def _parse_html(html: str) -> _NitterHTMLParser:
     p = _NitterHTMLParser()
     p.feed(html)
     return p
@@ -53,7 +53,7 @@ def _parse_stat_number(text: str) -> int:
         return 0
 
 
-def _extract_tweets_from_events(events: List[Tuple], base_url: str = "") -> List[Dict]:
+def _extract_tweets_from_events(events: list[tuple], base_url: str = "") -> list[dict]:
     """
     Extract tweet dicts from the parsed event list.
 
@@ -219,9 +219,7 @@ def _extract_tweets_from_events(events: List[Tuple], base_url: str = "") -> List
                             media_urls.append(real_url)
 
             elif jev[0] == "close":
-                if jev[1] == "div":
-                    depth -= 1
-                elif jev[1] == "span":
+                if jev[1] == "div" or jev[1] == "span":
                     depth -= 1
 
             elif jev[0] == "text":
@@ -282,7 +280,7 @@ def _extract_tweets_from_events(events: List[Tuple], base_url: str = "") -> List
     return tweets
 
 
-def _extract_next_cursor(html: str) -> Optional[str]:
+def _extract_next_cursor(html: str) -> str | None:
     """Extract next-page cursor from Nitter HTML.
 
     Nitter renders: <div class="show-more"><a href="?cursor=XXX">Load more</a></div>
@@ -295,7 +293,7 @@ def _extract_next_cursor(html: str) -> Optional[str]:
     return None
 
 
-def _extract_user_info(html: str, username: str) -> Dict:
+def _extract_user_info(html: str, username: str) -> dict:
     """Extract profile info from Nitter user page."""
     info = {
         "username": username,
@@ -342,7 +340,7 @@ def _extract_user_info(html: str, username: str) -> Dict:
     return info
 
 
-def parse_tweet_detail_html(html: str, username: str, tweet_id: str) -> Dict:
+def parse_tweet_detail_html(html: str, username: str, tweet_id: str) -> dict:
     """Split a Nitter /user/status/ID page into main tweet + replies. Pure."""
     main_html = ""
     replies_html = ""
@@ -385,7 +383,7 @@ def parse_tweet_detail_html(html: str, username: str, tweet_id: str) -> Dict:
         if og_text and len(og_text) >= len(main_tweet.get("text", "")):
             main_tweet["text"] = og_text
 
-    replies: List[Dict] = []
+    replies: list[dict] = []
     if replies_html:
         replies = _extract_tweets_from_events(_parse_html(replies_html).events)
 
