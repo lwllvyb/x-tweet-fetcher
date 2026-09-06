@@ -184,7 +184,7 @@ def test_query_ledger_missing_table_returns_empty(tmp_path):
 
 def test_query_ledger_sorts_by_imported_at(tmp_path, monkeypatch):
     # B1: sort by imported_at DESC (not relative created_at), tie-break tweet_id.
-    import xtf.ledger as ledger
+    from xtf import ledger
     db = tmp_path / "ledger.db"
     stamps = iter(["2026-08-01T00:00:00+00:00", "2026-08-02T00:00:00+00:00"])
     monkeypatch.setattr(ledger, "utc_now", lambda: next(stamps))

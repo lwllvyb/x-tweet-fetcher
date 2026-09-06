@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 from . import config
 from .exceptions import XtfError
@@ -44,7 +44,7 @@ def _save_cache(username: str, cache: dict) -> None:
         json.dump(cache, f, ensure_ascii=False, indent=2)
 
 
-def _search_mentions_nitter(nitter_backend, username: str, limit: int) -> List[Dict]:
+def _search_mentions_nitter(nitter_backend, username: str, limit: int) -> list[dict]:
     clean = username.lstrip("@")
     tweets = nitter_backend.search(f"@{clean}", limit=limit)
     results = []
@@ -61,9 +61,9 @@ def _search_mentions_nitter(nitter_backend, username: str, limit: int) -> List[D
 
 
 def monitor_mentions(router, username: str, limit: int = 10,
-                     use_nitter: bool = False) -> Dict[str, Any]:
+                     use_nitter: bool = False) -> dict[str, Any]:
     """Run one monitor cycle. Returns v1-compatible result dict."""
-    result: Dict[str, Any] = {
+    result: dict[str, Any] = {
         "username": username.lstrip("@"),
         "new_mentions": [],
         "is_baseline": False,

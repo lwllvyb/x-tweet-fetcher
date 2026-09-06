@@ -8,7 +8,8 @@ from __future__ import annotations
 
 import re
 import urllib.parse
-from typing import Any, Dict, List, Optional
+from typing import Any
+
 
 def _parse_stats_from_text(raw: str) -> tuple:
     """Parse stats numbers from Nitter text line like 'content  1   22  4,418'.
@@ -72,7 +73,7 @@ def _parse_stats_from_text(raw: str) -> tuple:
     return cleaned, 0, 0, 0, 0
 
 
-def parse_timeline_snapshot(snapshot: str, limit: int = 20) -> List[Dict]:
+def parse_timeline_snapshot(snapshot: str, limit: int = 20) -> list[dict]:
     """Parse Nitter user/list timeline page snapshot into tweet list.
 
     Handles retweets (``XXX retweeted``), quoted tweets (nested status
@@ -167,12 +168,12 @@ def parse_timeline_snapshot(snapshot: str, limit: int = 20) -> List[Dict]:
                 raw = stripped[len("- text:"):].strip()
                 if not raw:
                     continue
-                if re.search(r"retweeted\s*$", raw, re.I):
+                if re.search(r"retweeted\s*$", raw, re.IGNORECASE):
                     continue
                 if raw == "Replying to":
                     continue
                 # Check for stats-only line (e.g. "  7  9  83 ")
-                _, rc, rt, lk, vw = _parse_stats_from_text(raw)
+                _, rc, _rt, lk, vw = _parse_stats_from_text(raw)
                 if lk or rc or vw:
                     tp = raw
                     stat_m = re.search(r"\s{2,}\d[\d,]*\s{2,}\d[\d,]*", raw)
@@ -337,7 +338,7 @@ def parse_timeline_snapshot(snapshot: str, limit: int = 20) -> List[Dict]:
 
 
 
-def parse_replies_snapshot(snapshot: str, original_author: str) -> List[Dict]:
+def parse_replies_snapshot(snapshot: str, original_author: str) -> list[dict]:
     """Parse replies from Nitter tweet page snapshot.
 
     Each reply block in Nitter looks like:
@@ -472,9 +473,8 @@ def parse_replies_snapshot(snapshot: str, original_author: str) -> List[Dict]:
                 named_link_match = re.match(r'^- link "([^"]+)"\s*(\[e\d+\])?:?$', fwd)
                 if named_link_match:
                     link_text = named_link_match.group(1).strip()
-                    if link_text.startswith("http"):
-                        if link_text not in links:
-                            links.append(link_text)
+                    if link_text.startswith("http") and link_text not in links:
+                        links.append(link_text)
 
                 # Stop at next "Replying to" block - but collect nested replies first
                 if fwd == "- text: Replying to":
@@ -503,7 +503,7 @@ def parse_replies_snapshot(snapshot: str, original_author: str) -> List[Dict]:
                         if nested_line.startswith("- text:"):
                             raw = nested_line[len("- text:"):].strip()
                             if raw:
-                                text_part, rc, rt, lk, vw = _parse_stats_from_text(raw)
+                                text_part, rc, _rt, lk, vw = _parse_stats_from_text(raw)
                                 if text_part and not nested_reply_text:
                                     skip_labels = {"replying to", ""}
                                     if text_part.strip().lower() not in skip_labels:
@@ -563,7 +563,7 @@ def parse_replies_snapshot(snapshot: str, original_author: str) -> List[Dict]:
 # High-level feature functions
 # ---------------------------------------------------------------------------
 
-def extract_next_cursor(snapshot: str) -> Optional[str]:
+def extract_next_cursor(snapshot: str) -> str | None:
     """Extract the next-page cursor from a Nitter timeline snapshot.
 
     Nitter aria snapshot format for the "Load more" link:
@@ -583,7 +583,7 @@ def extract_next_cursor(snapshot: str) -> Optional[str]:
                     return urllib.parse.unquote(m.group(1))
     return None
 
-def parse_article_snapshot(snapshot: str) -> Dict[str, Any]:
+def parse_article_snapshot(snapshot: str) -> dict[str, Any]:
     """Parse an X Article page snapshot (Camofox aria snapshot) into structured data.
 
     X Article accessibility tree structure (observed):
@@ -603,10 +603,10 @@ def parse_article_snapshot(snapshot: str) -> Dict[str, Any]:
       is_partial (True when content is likely truncated due to login wall)
     """
     lines = snapshot.split("\n")
-    title: Optional[str] = None
-    author_handle: Optional[str] = None
-    author_name: Optional[str] = None
-    paragraphs: List[str] = []
+    title: str | None = None
+    author_handle: str | None = None
+    author_name: str | None = None
+    paragraphs: list[str] = []
 
     # Patterns
     heading_re = re.compile(r'^-\s+heading\s+"(.+)"', re.IGNORECASE)

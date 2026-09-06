@@ -11,10 +11,10 @@ integrations keep working byte-for-byte.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
-def _drop_empty(d: Dict[str, Any], keys: tuple) -> Dict[str, Any]:
+def _drop_empty(d: dict[str, Any], keys: tuple) -> dict[str, Any]:
     for k in keys:
         if not d.get(k):
             d.pop(k, None)
@@ -34,12 +34,12 @@ class Tweet:
     replies: int = 0
     views: int = 0
     tweet_id: str = ""
-    media: List[str] = field(default_factory=list)
-    retweeted_by: Optional[str] = None
-    quoted_tweet: Optional["Tweet"] = None
+    media: list[str] = field(default_factory=list)
+    retweeted_by: str | None = None
+    quoted_tweet: Tweet | None = None
 
     @classmethod
-    def from_snapshot_entry(cls, d: Dict[str, Any]) -> "Tweet":
+    def from_snapshot_entry(cls, d: dict[str, Any]) -> Tweet:
         qt = d.get("quoted_tweet")
         return cls(
             author=d.get("author", ""),
@@ -57,7 +57,7 @@ class Tweet:
         )
 
     @classmethod
-    def from_nitter_entry(cls, d: Dict[str, Any]) -> "Tweet":
+    def from_nitter_entry(cls, d: dict[str, Any]) -> Tweet:
         """Normalize nitter_html parser output (username/display_name/time keys)."""
         user = d.get("username", "")
         return cls(
@@ -73,8 +73,8 @@ class Tweet:
             media=list(d.get("media_urls", []) or []),
         )
 
-    def to_dict(self) -> Dict[str, Any]:
-        d: Dict[str, Any] = {
+    def to_dict(self) -> dict[str, Any]:
+        d: dict[str, Any] = {
             "author": self.author,
             "author_name": self.author_name,
             "text": self.text,
@@ -107,12 +107,12 @@ class Reply:
     replies: int = 0
     views: int = 0
     tweet_id: str = ""
-    media: List[str] = field(default_factory=list)
-    links: List[str] = field(default_factory=list)
-    thread_replies: List[Dict[str, Any]] = field(default_factory=list)
+    media: list[str] = field(default_factory=list)
+    links: list[str] = field(default_factory=list)
+    thread_replies: list[dict[str, Any]] = field(default_factory=list)
 
     @classmethod
-    def from_snapshot_entry(cls, d: Dict[str, Any]) -> "Reply":
+    def from_snapshot_entry(cls, d: dict[str, Any]) -> Reply:
         return cls(
             author=d.get("author", ""),
             author_name=d.get("author_name", d.get("author", "")),
@@ -128,8 +128,8 @@ class Reply:
             thread_replies=list(d.get("thread_replies", []) or []),
         )
 
-    def to_dict(self) -> Dict[str, Any]:
-        d: Dict[str, Any] = {
+    def to_dict(self) -> dict[str, Any]:
+        d: dict[str, Any] = {
             "author": self.author,
             "author_name": self.author_name,
             "text": self.text,
@@ -161,7 +161,7 @@ class Profile:
     followers: int = 0
     joined: str = ""
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "username": self.username,
             "display_name": self.display_name,
@@ -181,12 +181,12 @@ class Article:
     author: str = ""
     author_handle: str = ""
     content: str = ""
-    paragraphs: List[str] = field(default_factory=list)
+    paragraphs: list[str] = field(default_factory=list)
     word_count: int = 0
     char_count: int = 0
     is_partial: bool = False
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "article_id": self.article_id,
             "url": self.url,

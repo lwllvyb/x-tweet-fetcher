@@ -13,7 +13,8 @@ Priority per capability:
 from __future__ import annotations
 
 import sys
-from typing import Any, Callable, Dict, List, Optional
+from collections.abc import Callable
+from typing import Any
 
 from .backends.base import Backend
 from .backends.browser import BrowserBackend
@@ -33,10 +34,10 @@ _FALLTHROUGH = (NotSupported, BackendUnavailable, RateLimited, UpstreamDown)
 
 class Router:
     def __init__(self, backend: str = "auto",
-                 nitter_instances: Optional[List[str]] = None,
-                 browser_driver: Optional[str] = None,
-                 browser_port: Optional[int] = None,
-                 browser_nitter: Optional[str] = None):
+                 nitter_instances: list[str] | None = None,
+                 browser_driver: str | None = None,
+                 browser_port: int | None = None,
+                 browser_nitter: str | None = None):
         """backend: 'auto' | 'nitter' | 'browser' (mirrors the v1 --backend flag)."""
         self.mode = backend
         self.fxtwitter = FxTwitterBackend()
@@ -45,7 +46,7 @@ class Router:
                                       nitter_instance=browser_nitter)
 
     # ── chain construction ───────────────────────────────────────────────
-    def _chain(self) -> List[Backend]:
+    def _chain(self) -> list[Backend]:
         if self.mode == "nitter":
             return [self.nitter]
         if self.mode == "browser":
@@ -54,8 +55,8 @@ class Router:
         return [self.nitter, self.browser]
 
     def _run(self, op_name: str, call: Callable[[Backend], Any],
-             chain: Optional[List[Backend]] = None) -> Any:
-        causes: Dict[str, XtfError] = {}
+             chain: list[Backend] | None = None) -> Any:
+        causes: dict[str, XtfError] = {}
         for backend in (chain if chain is not None else self._chain()):
             try:
                 result = call(backend)
@@ -71,12 +72,12 @@ class Router:
     # ── public API ───────────────────────────────────────────────────────
     last_backend: str = ""
 
-    def fetch_tweet(self, username: str, tweet_id: str) -> Dict[str, Any]:
+    def fetch_tweet(self, username: str, tweet_id: str) -> dict[str, Any]:
         return self._run("fetch_tweet",
                          lambda b: b.fetch_tweet(username, tweet_id),
                          chain=[self.fxtwitter])
 
-    def fetch_user_info(self, username: str) -> Dict[str, Any]:
+    def fetch_user_info(self, username: str) -> dict[str, Any]:
         # v1 behavior: FxTwitter first (rich fields), Nitter HTML fallback
         try:
             result = self.fxtwitter.fetch_user_info_dict(username)

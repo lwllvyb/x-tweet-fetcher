@@ -12,9 +12,10 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
+from collections.abc import Iterable
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
+from typing import Any
 
 #: Key fallbacks accept richer backend dicts (FxTwitter / Nitter raw rows)
 #: when available. Relative time fields (``time_ago``/``time``, e.g. "3h")
@@ -80,7 +81,7 @@ def ensure_tables(conn: sqlite3.Connection) -> None:
     )
 
 
-def _first(record: Dict[str, Any], *keys: str) -> Optional[str]:
+def _first(record: dict[str, Any], *keys: str) -> str | None:
     for key in keys:
         value = record.get(key)
         if value not in (None, ""):
@@ -88,12 +89,12 @@ def _first(record: Dict[str, Any], *keys: str) -> Optional[str]:
     return None
 
 
-def _extract_urls(text: str) -> List[str]:
+def _extract_urls(text: str) -> list[str]:
     """Extract http(s) links from free text when the record has no urls list."""
     return list(dict.fromkeys(_URL_RE.findall(text)))
 
 
-def normalize(record: Dict[str, Any], source: str, imported_at: str) -> Tuple[str, ...]:
+def normalize(record: dict[str, Any], source: str, imported_at: str) -> tuple[str, ...]:
     """Map a tweet dict (xtf ``to_dict()`` or a raw backend row) to a ledger row.
 
     Raises ValueError when the record has no usable tweet id or text.
@@ -139,7 +140,7 @@ def normalize(record: Dict[str, Any], source: str, imported_at: str) -> Tuple[st
     )
 
 
-def _as_dict(tweet: Union[Dict[str, Any], Any]) -> Dict[str, Any]:
+def _as_dict(tweet: dict[str, Any] | Any) -> dict[str, Any]:
     """Accept either a dict or any object exposing ``to_dict()`` (e.g. Tweet)."""
     if hasattr(tweet, "to_dict"):
         return tweet.to_dict()
@@ -168,9 +169,9 @@ def count_existing_tweets(db_path: Path, tweet_ids: Iterable[str]) -> int:
 
 def archive_tweets(
     db_path: Path,
-    tweets: Iterable[Union[Dict[str, Any], Any]],
+    tweets: Iterable[dict[str, Any] | Any],
     source: str = "xtf",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Archive tweet dicts/objects into the ledger, deduping on tweet_id.
 
     Returns a report dict with input/inserted/duplicate/skipped counts and the
@@ -180,7 +181,7 @@ def archive_tweets(
     imported_at = utc_now()
     records = [_as_dict(t) for t in tweets]
 
-    rows: List[Tuple[str, ...]] = []
+    rows: list[tuple[str, ...]] = []
     skipped = 0
     for record in records:
         try:
@@ -194,7 +195,7 @@ def archive_tweets(
     conn = sqlite3.connect(db_path)
     try:
         ensure_tables(conn)
-        inserted_ids: List[str] = []
+        inserted_ids: list[str] = []
         for row in rows:
             cursor = conn.execute(_INSERT_SQL, row)
             if cursor.rowcount == 1:
@@ -237,10 +238,10 @@ def _escape_like(text: str) -> str:
 
 def query_ledger(
     db_path: Path,
-    keyword: Optional[str] = None,
+    keyword: str | None = None,
     limit: int = 50,
     offset: int = 0,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Search archived tweets by keyword (substring match on full_text)."""
     db_path = Path(db_path)
     if not db_path.exists():
@@ -254,7 +255,7 @@ def query_ledger(
             # DB file exists but has no ledger schema — nothing to query.
             return []
         sql = "SELECT * FROM tweets"
-        params: List[Any] = []
+        params: list[Any] = []
         if keyword:
             sql += " WHERE full_text LIKE ? ESCAPE '\\'"
             params.append(f"%{_escape_like(keyword)}%")
@@ -265,7 +266,7 @@ def query_ledger(
         conn.close()
 
 
-def _empty_stats(exists: bool) -> Dict[str, Any]:
+def _empty_stats(exists: bool) -> dict[str, Any]:
     """Stable stats skeleton so callers can rely on the full key set."""
     return {
         "exists": exists,
@@ -282,7 +283,7 @@ def _empty_stats(exists: bool) -> Dict[str, Any]:
     }
 
 
-def ledger_stats(db_path: Path) -> Dict[str, Any]:
+def ledger_stats(db_path: Path) -> dict[str, Any]:
     """Aggregate stats over the archived tweets.
 
     Never returns None and never raises for a missing/empty/foreign DB:

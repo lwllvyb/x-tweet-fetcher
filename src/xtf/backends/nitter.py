@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import sys
 import urllib.parse
-from typing import Dict, List, Optional
 
 from .. import config, http
 from ..exceptions import BackendUnavailable, XtfError
@@ -37,12 +36,12 @@ _MAX_PAGES = 10
 class NitterBackend(Backend):
     name = "nitter"
 
-    def __init__(self, instances: Optional[List[str]] = None):
+    def __init__(self, instances: list[str] | None = None):
         self.instances = instances or config.nitter_instances()
-        self._live: Optional[str] = None  # cached healthy instance
+        self._live: str | None = None  # cached healthy instance
 
     # ── instance management ──────────────────────────────────────────────
-    def _healthy_instance(self) -> Optional[str]:
+    def _healthy_instance(self) -> str | None:
         if self._live:
             return self._live
         for inst in self.instances:
@@ -56,7 +55,7 @@ class NitterBackend(Backend):
 
     def _get_html(self, path: str) -> str:
         """GET a path, failing over across instances on upstream errors."""
-        errors: Dict[str, str] = {}
+        errors: dict[str, str] = {}
         start = self._healthy_instance()
         candidates = [start] + [i for i in self.instances if i != start] if start else list(self.instances)
         for inst in candidates:
@@ -76,9 +75,9 @@ class NitterBackend(Backend):
         )
 
     # ── capabilities ─────────────────────────────────────────────────────
-    def search(self, query: str, limit: int = 20) -> List[Tweet]:
-        tweets_raw: List[Dict] = []
-        cursor: Optional[str] = None
+    def search(self, query: str, limit: int = 20) -> list[Tweet]:
+        tweets_raw: list[dict] = []
+        cursor: str | None = None
         page = 1
         while len(tweets_raw) < limit and page <= _MAX_PAGES:
             params = {"q": query, "f": "tweets"}
@@ -100,14 +99,14 @@ class NitterBackend(Backend):
             page += 1
         return [Tweet.from_nitter_entry(tw) for tw in tweets_raw]
 
-    def fetch_timeline(self, username: str, limit: int = 20) -> List[Tweet]:
+    def fetch_timeline(self, username: str, limit: int = 20) -> list[Tweet]:
         # Direct /{username} route 404s on session-auth Nitter; search works.
         return self.search(f"from:{username}", limit=limit)
 
-    def fetch_replies(self, username: str, tweet_id: str) -> List[Reply]:
+    def fetch_replies(self, username: str, tweet_id: str) -> list[Reply]:
         html = self._get_html(f"/{username}/status/{tweet_id}")
         detail = parse_tweet_detail_html(html, username, tweet_id)
-        replies: List[Reply] = []
+        replies: list[Reply] = []
         for r in detail.get("replies_list", []):
             replies.append(
                 Reply(

@@ -14,7 +14,7 @@ from __future__ import annotations
 import sys
 import time
 import urllib.parse
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from .. import config
 from ..exceptions import BackendUnavailable, UpstreamDown
@@ -29,7 +29,7 @@ from ..parsers.snapshot import (
 from .base import Backend
 
 
-def _load_driver(name: Optional[str] = None):
+def _load_driver(name: str | None = None):
     """Import the requested driver module. Raises BackendUnavailable."""
     name = name or config.browser_driver()
     if name == "playwright":
@@ -47,8 +47,8 @@ def _load_driver(name: Optional[str] = None):
 class BrowserBackend(Backend):
     name = "browser"
 
-    def __init__(self, driver: Optional[str] = None, port: Optional[int] = None,
-                 nitter_instance: Optional[str] = None):
+    def __init__(self, driver: str | None = None, port: int | None = None,
+                 nitter_instance: str | None = None):
         self.driver_name = driver or config.browser_driver()
         self.port = port or config.browser_port()
         # Nitter host used for browser-rendered pages (first configured instance)
@@ -81,9 +81,9 @@ class BrowserBackend(Backend):
 
     # ── paginated timeline core (shared by user timeline and lists) ──────
     def _paged_timeline(self, base_url: str, session_prefix: str,
-                        limit: int, max_pages: int) -> tuple[List[Dict], int]:
-        tweets: List[Dict] = []
-        cursor: Optional[str] = None
+                        limit: int, max_pages: int) -> tuple[list[dict], int]:
+        tweets: list[dict] = []
+        cursor: str | None = None
         page = 1
         while len(tweets) < limit and page <= max_pages:
             if cursor:
@@ -125,7 +125,7 @@ class BrowserBackend(Backend):
         return tweets, page
 
     # ── capabilities ─────────────────────────────────────────────────────
-    def fetch_timeline(self, username: str, limit: int = 20) -> List[Tweet]:
+    def fetch_timeline(self, username: str, limit: int = 20) -> list[Tweet]:
         self._require("err_camofox_not_running_user")
         raw, _pages = self._paged_timeline(
             f"https://{self.nitter_host}/{username}",
@@ -133,7 +133,7 @@ class BrowserBackend(Backend):
         )
         return [Tweet.from_snapshot_entry(tw) for tw in raw]
 
-    def fetch_list(self, list_id: str, limit: int = 20) -> List[Tweet]:
+    def fetch_list(self, list_id: str, limit: int = 20) -> list[Tweet]:
         self._require("err_camofox_not_running_list")
         raw, _pages = self._paged_timeline(
             f"https://{self.nitter_host}/i/lists/{list_id}",
@@ -142,7 +142,7 @@ class BrowserBackend(Backend):
         return [Tweet.from_snapshot_entry(tw) for tw in raw]
 
     def fetch_replies(self, username: str, tweet_id: str,
-                      recurse_nested: bool = True) -> List[Reply]:
+                      recurse_nested: bool = True) -> list[Reply]:
         self._require("err_camofox_not_running_replies")
         nitter_url = f"https://{self.nitter_host}/{username}/status/{tweet_id}"
         print(t("opening_via_camofox", url=nitter_url), file=sys.stderr)
@@ -190,11 +190,11 @@ class BrowserBackend(Backend):
         )
 
     # ── mentions search (Google via browser) ─────────────────────────────
-    def search_mentions(self, username: str, limit: int = 10) -> List[Dict[str, Any]]:
+    def search_mentions(self, username: str, limit: int = 10) -> list[dict[str, Any]]:
         clean = username.lstrip("@")
         queries = [f"site:x.com @{clean}", f"site:x.com {clean}"]
         seen_urls: set = set()
-        results: List[Dict[str, Any]] = []
+        results: list[dict[str, Any]] = []
         for query in queries:
             print(t("monitor_searching", query=query), file=sys.stderr)
             raw = self.drv.camofox_search(query, num=limit, port=self.port)

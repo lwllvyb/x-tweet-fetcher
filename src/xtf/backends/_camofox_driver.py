@@ -11,10 +11,9 @@ import re
 import secrets
 import sys
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
-import urllib.error
-from typing import Optional
 
 
 def check_camofox(port: int = 9377) -> bool:
@@ -28,7 +27,7 @@ def check_camofox(port: int = 9377) -> bool:
         return False
 
 
-def camofox_open_tab(url: str, session_key: str, port: int = 9377) -> Optional[str]:
+def camofox_open_tab(url: str, session_key: str, port: int = 9377) -> str | None:
     """Open a new Camofox tab; return tabId or None."""
     if not url.startswith(('http://', 'https://')):
         print(f"[Camofox] rejected non-HTTP URL: {url[:60]}", file=sys.stderr)
@@ -53,7 +52,7 @@ def camofox_open_tab(url: str, session_key: str, port: int = 9377) -> Optional[s
         return None
 
 
-def camofox_snapshot(tab_id: str, port: int = 9377) -> Optional[str]:
+def camofox_snapshot(tab_id: str, port: int = 9377) -> str | None:
     """Get page snapshot text from Camofox tab."""
     try:
         url = f"http://localhost:{port}/tabs/{tab_id}/snapshot?userId=x-tweet-fetcher"
@@ -77,7 +76,7 @@ def camofox_close_tab(tab_id: str, port: int = 9377):
         pass
 
 
-def camofox_fetch_page(url: str, session_key: str, wait: float = 8, port: int = 9377) -> Optional[str]:
+def camofox_fetch_page(url: str, session_key: str, wait: float = 8, port: int = 9377) -> str | None:
     """Open URL in Camofox, wait, snapshot, close. Returns snapshot text."""
     tab_id = camofox_open_tab(url, session_key, port)
     if not tab_id:
@@ -143,7 +142,7 @@ def _parse_duckduckgo_results(snapshot: str, max_results: int = 10) -> list:
             k = i + 1
             while k < len(lines) and k < i + 8:
                 sline = lines[k].strip()
-                if sline.startswith("- heading ") or sline.startswith("- link "):
+                if sline.startswith(("- heading ", "- link ")):
                     break
                 for prefix in ["- text:", "text:", "- emphasis:", "emphasis:"]:
                     if sline.startswith(prefix):
@@ -193,7 +192,7 @@ def _parse_google_results(snapshot: str) -> list:
             # Collect snippet lines until next link/heading
             while k < len(lines):
                 sline = lines[k].strip()
-                if sline.startswith("- link ") or sline.startswith("- heading "):
+                if sline.startswith(("- link ", "- heading ")):
                     break
                 if sline.startswith("- text:"):
                     snippet_parts.append(sline.split("- text:", 1)[1].strip())
